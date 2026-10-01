@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>Лянтор Доставка</title>
+<title>Лиантор Доставка</title>
+<link rel="icon" href="data:,">
 <script src="https://st.max.ru/js/max-web-app.js"></script>
 <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
 <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
@@ -21,8 +22,6 @@
 <script type="text/babel" data-presets="react">
 const { useState, useEffect } = React;
 
-// ═══════ НАСТРОЙКИ ═══════
-// ЗАМЕНИ на URL твоего Worker из Шага 4:
 const API_URL = "https://lyantor-delivery-api.9chingis.workers.dev";
 
 const ZONES = {
@@ -41,81 +40,85 @@ const STATUSES = {
   canceled:    { label: 'Отменён',  color: '#EF5350' },
 };
 
-// ═══════ MAX BRIDGE ═══════
-const Max = {
-  initData() { return (window.WebApp && window.WebApp.initData) || ''; },
-  user() { return (window.WebApp && window.WebApp.initDataUnsafe && window.WebApp.initDataUnsafe.user) || null; },
-  init() {
-    // MAX Bridge не требует вызова ready() и expand() —
-    // объект window.WebApp уже готов к работе.
-    // Ничего делать не нужно.
-  }, { window.WebApp.ready(); window.WebApp.expand(); } },
-  close() { if (window.WebApp) window.WebApp.close(); },
-};
+function getInitData() {
+  try {
+    return (window.WebApp && window.WebApp.initData) || '';
+  } catch (e) { return ''; }
+}
+
+function getUser() {
+  try {
+    return (window.WebApp && window.WebApp.initDataUnsafe && window.WebApp.initDataUnsafe.user) || null;
+  } catch (e) { return null; }
+}
 
 async function apiRequest(path, options) {
   options = options || {};
   const res = await fetch(API_URL + path, {
-    ...options,
+    method: options.method || 'GET',
     headers: {
       'Content-Type': 'application/json',
-      'x-max-init-data': Max.initData(),
-      ...(options.headers || {}),
+      'x-max-init-data': getInitData(),
     },
+    body: options.body,
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: 'network' }));
+    const err = await res.json().catch(function() { return { error: 'network' }; });
     throw new Error(err.error || 'Ошибка сети');
   }
   return res.json();
 }
 
 const api = {
-  createOrder: (p) => apiRequest('/api/orders', { method: 'POST', body: JSON.stringify(p) }),
-  myOrders:   ()  => apiRequest('/api/orders/my'),
-  courierOrders: (s) => apiRequest('/api/courier/orders' + (s ? '?status=' + s : '')),
-  courierAccept: (id) => apiRequest('/api/courier/orders/' + id + '/accept', { method: 'POST' }),
-  courierStatus: (id, s) => apiRequest('/api/courier/orders/' + id + '/status', {
-    method: 'PATCH', body: JSON.stringify({ status: s })
-  }),
+  createOrder: function(p) { return apiRequest('/api/orders', { method: 'POST', body: JSON.stringify(p) }); },
+  myOrders:    function() { return apiRequest('/api/orders/my'); },
+  courierOrders: function(s) { return apiRequest('/api/courier/orders' + (s ? '?status=' + s : '')); },
+  courierAccept: function(id) { return apiRequest('/api/courier/orders/' + id + '/accept', { method: 'POST' }); },
+  courierStatus: function(id, s) { return apiRequest('/api/courier/orders/' + id + '/status', { method: 'PATCH', body: JSON.stringify({ status: s }) }); },
 };
 
-// ═══════ КОМПОНЕНТЫ ═══════
-function NavBtn({ active, onClick, children }) {
-  return <button onClick={onClick} style={{
-    flex: 1, padding: 14, border: 0, background: 'transparent', fontSize: 14,
-    color: active ? '#4C6EF5' : '#888',
-    fontWeight: active ? 700 : 400, cursor: 'pointer',
-  }}>{children}</button>;
+function NavBtn(props) {
+  return React.createElement('button', {
+    onClick: props.onClick,
+    style: {
+      flex: 1, padding: 14, border: 0, background: 'transparent', fontSize: 14,
+      color: props.active ? '#4C6EF5' : '#888',
+      fontWeight: props.active ? 700 : 400, cursor: 'pointer',
+    }
+  }, props.children);
 }
 
-function Field({ label, children }) {
-  return <label style={{ display: 'block', marginBottom: 10 }}>
-    <div style={{ fontSize: 13, color: '#666', marginBottom: 4 }}>{label}</div>
-    {children}
-  </label>;
+function Field(props) {
+  return React.createElement('label', { style: { display: 'block', marginBottom: 10 } },
+    React.createElement('div', { style: { fontSize: 13, color: '#666', marginBottom: 4 } }, props.label),
+    props.children
+  );
 }
 
-function ToggleBtn({ active, onClick, children }) {
-  return <button onClick={onClick} style={{
-    flex: 1, padding: 10, border: 0, borderRadius: 8, fontSize: 15,
-    background: active ? '#4C6EF5' : '#eee',
-    color: active ? '#fff' : '#000',
-    fontWeight: active ? 600 : 400, cursor: 'pointer',
-  }}>{children}</button>;
+function ToggleBtn(props) {
+  return React.createElement('button', {
+    onClick: props.onClick,
+    style: {
+      flex: 1, padding: 10, border: 0, borderRadius: 8, fontSize: 15,
+      background: props.active ? '#4C6EF5' : '#eee',
+      color: props.active ? '#fff' : '#000',
+      fontWeight: props.active ? 600 : 400, cursor: 'pointer',
+    }
+  }, props.children);
 }
 
-function StatusBadge({ status }) {
-  const st = STATUSES[status] || { label: status, color: '#999' };
-  return <span style={{
-    background: st.color, color: '#fff', borderRadius: 12,
-    padding: '2px 10px', fontSize: 12, fontWeight: 600,
-  }}>{st.label}</span>;
+function StatusBadge(props) {
+  const st = STATUSES[props.status] || { label: props.status, color: '#999' };
+  return React.createElement('span', {
+    style: {
+      background: st.color, color: '#fff', borderRadius: 12,
+      padding: '2px 10px', fontSize: 12, fontWeight: 600,
+    }
+  }, st.label);
 }
 
-// ─── Форма нового заказа ───
-function NewOrder({ onDone }) {
-  const user = Max.user();
+function NewOrder(props) {
+  const user = getUser();
   const [form, setForm] = useState({
     task_type: 'pickup',
     description: '',
@@ -128,8 +131,16 @@ function NewOrder({ onDone }) {
   });
   const [sending, setSending] = useState(false);
 
-  const set = (k, v) => setForm(f => ({ ...f, [k]: v }));
+  function set(k, v) {
+    setForm(function(f) {
+      const next = Object.assign({}, f);
+      next[k] = v;
+      return next;
+    });
+  }
+
   const price = ZONES[form.zone].price;
+  const inputStyle = { width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 15 };
 
   async function submit() {
     if (!form.phone || !form.description || !form.delivery_addr) {
@@ -140,7 +151,7 @@ function NewOrder({ onDone }) {
     try {
       await api.createOrder(form);
       alert('Заказ принят! К оплате курьеру: ' + price + ' ₽');
-      onDone();
+      props.onDone();
     } catch (e) {
       alert(e.message || 'Ошибка');
     } finally {
@@ -148,217 +159,225 @@ function NewOrder({ onDone }) {
     }
   }
 
-  const inputStyle = {
-    width: '100%', padding: 10, border: '1px solid #ddd',
-    borderRadius: 8, fontSize: 15,
-  };
-
-  return <div>
-    <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-      <ToggleBtn active={form.task_type === 'pickup'} onClick={() => set('task_type', 'pickup')}>Забрать</ToggleBtn>
-      <ToggleBtn active={form.task_type === 'buy'}    onClick={() => set('task_type', 'buy')}>Купить</ToggleBtn>
-    </div>
-
-    <Field label="Что нужно сделать">
-      <textarea style={{ ...inputStyle, resize: 'vertical' }} rows={3}
-        value={form.description}
-        onChange={e => set('description', e.target.value)}
-        placeholder={form.task_type === 'pickup'
-          ? 'Забрать документы из офиса №5'
-          : 'Купить хлеб, молоко 2 л'} />
-    </Field>
-
-    {form.task_type === 'pickup' && <Field label="Откуда забрать">
-      <input style={inputStyle} value={form.pickup_addr}
-        onChange={e => set('pickup_addr', e.target.value)}
-        placeholder="Улица, дом, кв." />
-    </Field>}
-
-    <Field label="Куда доставить">
-      <input style={inputStyle} value={form.delivery_addr}
-        onChange={e => set('delivery_addr', e.target.value)}
-        placeholder="Улица, дом, кв." />
-    </Field>
-
-    <Field label="Зона доставки">
-      <select style={inputStyle} value={form.zone}
-        onChange={e => set('zone', e.target.value)}>
-        {Object.entries(ZONES).map(([k, v]) =>
-          <option key={k} value={k}>{v.label} — {v.price} ₽</option>
-        )}
-      </select>
-    </Field>
-
-    <Field label="Ваше имя">
-      <input style={inputStyle} value={form.customer_name}
-        onChange={e => set('customer_name', e.target.value)} />
-    </Field>
-
-    <Field label="Телефон">
-      <input style={inputStyle} type="tel" value={form.phone}
-        onChange={e => set('phone', e.target.value)} placeholder="+7..." />
-    </Field>
-
-    <Field label="Комментарий">
-      <input style={inputStyle} value={form.comment}
-        onChange={e => set('comment', e.target.value)} />
-    </Field>
-
-    <div style={{ marginTop: 16, fontSize: 18, fontWeight: 700 }}>
-      Итого: {price} ₽ (оплата курьеру)
-    </div>
-
-    <button onClick={submit} disabled={sending} style={{
-      marginTop: 12, width: '100%', padding: 14, background: '#4C6EF5',
-      color: '#fff', border: 0, borderRadius: 8, fontSize: 16, cursor: 'pointer',
-    }}>
-      {sending ? 'Отправка…' : 'Оформить заказ'}
-    </button>
-  </div>;
+  return React.createElement('div', null,
+    React.createElement('div', { style: { display: 'flex', gap: 8, marginBottom: 14 } },
+      React.createElement(ToggleBtn, { active: form.task_type === 'pickup', onClick: function() { set('task_type', 'pickup'); } }, 'Забрать'),
+      React.createElement(ToggleBtn, { active: form.task_type === 'buy', onClick: function() { set('task_type', 'buy'); } }, 'Купить')
+    ),
+    React.createElement(Field, { label: 'Что нужно сделать' },
+      React.createElement('textarea', {
+        style: Object.assign({}, inputStyle, { resize: 'vertical' }),
+        rows: 3,
+        value: form.description,
+        onChange: function(e) { set('description', e.target.value); },
+        placeholder: form.task_type === 'pickup' ? 'Забрать документы из офиса №5' : 'Купить хлеб, молоко 2 л',
+      })
+    ),
+    form.task_type === 'pickup' && React.createElement(Field, { label: 'Откуда забрать' },
+      React.createElement('input', {
+        style: inputStyle,
+        value: form.pickup_addr,
+        onChange: function(e) { set('pickup_addr', e.target.value); },
+        placeholder: 'Улица, дом, кв.',
+      })
+    ),
+    React.createElement(Field, { label: 'Куда доставить' },
+      React.createElement('input', {
+        style: inputStyle,
+        value: form.delivery_addr,
+        onChange: function(e) { set('delivery_addr', e.target.value); },
+        placeholder: 'Улица, дом, кв.',
+      })
+    ),
+    React.createElement(Field, { label: 'Зона доставки' },
+      React.createElement('select', {
+        style: inputStyle,
+        value: form.zone,
+        onChange: function(e) { set('zone', e.target.value); },
+      },
+        Object.keys(ZONES).map(function(k) {
+          return React.createElement('option', { key: k, value: k }, ZONES[k].label + ' — ' + ZONES[k].price + ' ₽');
+        })
+      )
+    ),
+    React.createElement(Field, { label: 'Ваше имя' },
+      React.createElement('input', {
+        style: inputStyle,
+        value: form.customer_name,
+        onChange: function(e) { set('customer_name', e.target.value); },
+      })
+    ),
+    React.createElement(Field, { label: 'Телефон' },
+      React.createElement('input', {
+        style: inputStyle, type: 'tel',
+        value: form.phone,
+        onChange: function(e) { set('phone', e.target.value); },
+        placeholder: '+7...',
+      })
+    ),
+    React.createElement(Field, { label: 'Комментарий' },
+      React.createElement('input', {
+        style: inputStyle,
+        value: form.comment,
+        onChange: function(e) { set('comment', e.target.value); },
+      })
+    ),
+    React.createElement('div', { style: { marginTop: 16, fontSize: 18, fontWeight: 700 } },
+      'Итого: ' + price + ' ₽ (оплата курьеру)'
+    ),
+    React.createElement('button', {
+      onClick: submit,
+      disabled: sending,
+      style: {
+        marginTop: 12, width: '100%', padding: 14, background: '#4C6EF5',
+        color: '#fff', border: 0, borderRadius: 8, fontSize: 16, cursor: 'pointer',
+      }
+    }, sending ? 'Отправка…' : 'Оформить заказ')
+  );
 }
 
-// ─── Мои заказы ───
 function MyOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    api.myOrders().then(setOrders).catch(e => alert(e.message)).finally(() => setLoading(false));
+  useEffect(function() {
+    api.myOrders()
+      .then(setOrders)
+      .catch(function(e) { alert(e.message); })
+      .finally(function() { setLoading(false); });
   }, []);
 
-  if (loading) return <p style={{ color: '#888' }}>Загрузка…</p>;
-  if (!orders.length) return <p style={{ color: '#888' }}>У вас пока нет заказов</p>;
+  if (loading) return React.createElement('p', { style: { color: '#888' } }, 'Загрузка…');
+  if (!orders.length) return React.createElement('p', { style: { color: '#888' } }, 'У вас пока нет заказов');
 
-  return <div>
-    {orders.map(o => <div key={o.id} style={{
-      background: '#fff', borderRadius: 12, padding: 14,
-      marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <b>Заказ #{o.id}</b>
-        <StatusBadge status={o.status} />
-      </div>
-      <p style={{ margin: '6px 0' }}>{o.description}</p>
-      {o.pickup_addr && <p style={{ margin: '4px 0', fontSize: 13, color: '#888' }}>Откуда: {o.pickup_addr}</p>}
-      <p style={{ margin: '4px 0', fontSize: 13, color: '#888' }}>Куда: {o.delivery_addr}</p>
-      <p style={{ margin: '4px 0', fontSize: 13, color: '#888' }}>
-        Зона: {(ZONES[o.zone] || {}).label} — {o.price} ₽
-      </p>
-    </div>)}
-  </div>;
+  return React.createElement('div', null, orders.map(function(o) {
+    return React.createElement('div', {
+      key: o.id,
+      style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' }
+    },
+      React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 } },
+        React.createElement('b', null, 'Заказ #' + o.id),
+        React.createElement(StatusBadge, { status: o.status })
+      ),
+      React.createElement('p', { style: { margin: '6px 0' } }, o.description),
+      o.pickup_addr && React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Откуда: ' + o.pickup_addr),
+      React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Куда: ' + o.delivery_addr),
+      React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } },
+        'Зона: ' + ((ZONES[o.zone] || {}).label || '') + ' — ' + o.price + ' ₽'
+      )
+    );
+  }));
 }
 
-// ─── Панель курьера ───
 function CourierPanel() {
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
 
-  const load = () => {
+  function load() {
     setLoading(true);
     api.courierOrders(filter || undefined)
       .then(setOrders)
-      .catch(e => alert(e.message))
-      .finally(() => setLoading(false));
-  };
+      .catch(function(e) { alert(e.message); })
+      .finally(function() { setLoading(false); });
+  }
 
   useEffect(load, [filter]);
 
-  async function accept(id) { await api.courierAccept(id); load(); }
-  async function setStatus(id, s) { await api.courierStatus(id, s); load(); }
+  function accept(id) { api.courierAccept(id).then(load); }
+  function setStatus(id, s) { api.courierStatus(id, s).then(load); }
 
-  const inputStyle = {
-    width: '100%', padding: 10, border: '1px solid #ddd',
-    borderRadius: 8, fontSize: 15, background: '#fff',
-  };
+  const inputStyle = { width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 15, background: '#fff' };
 
-  return <div>
-    <select style={{ ...inputStyle, marginBottom: 12 }}
-      value={filter} onChange={e => setFilter(e.target.value)}>
-      <option value="">Все заказы</option>
-      {Object.entries(STATUSES).map(([k, v]) =>
-        <option key={k} value={k}>{v.label}</option>
-      )}
-    </select>
-
-    {loading && <p style={{ color: '#888' }}>Загрузка…</p>}
-    {!loading && !orders.length && <p style={{ color: '#888' }}>Заказов нет</p>}
-
-    {orders.map(o => <div key={o.id} style={{
-      background: '#fff', borderRadius: 12, padding: 14,
-      marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)',
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-        <b>#{o.id} · {o.task_type === 'pickup' ? 'Забрать' : 'Купить'}</b>
-        <StatusBadge status={o.status} />
-      </div>
-      <p style={{ margin: '6px 0' }}>{o.description}</p>
-      {o.pickup_addr && <p style={{ margin: '4px 0', fontSize: 13, color: '#888' }}>Откуда: {o.pickup_addr}</p>}
-      <p style={{ margin: '4px 0', fontSize: 13, color: '#888' }}>Куда: {o.delivery_addr}</p>
-      <p style={{ margin: '4px 0', fontSize: 13, color: '#888' }}>
-        Зона: {(ZONES[o.zone] || {}).label} — {o.price} ₽
-      </p>
-      <p style={{ margin: '4px 0', fontSize: 13, color: '#888' }}>
-        Тел: {o.phone} · {o.customer_name || '—'}
-      </p>
-
-      <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-        {o.status === 'new' &&
-          <button onClick={() => accept(o.id)} style={{
-            flex: 1, padding: 10, background: '#4C6EF5', color: '#fff',
-            border: 0, borderRadius: 8, cursor: 'pointer',
-          }}>Принять</button>}
-        {o.status === 'accepted' &&
-          <button onClick={() => setStatus(o.id, 'in_progress')} style={{
-            flex: 1, padding: 10, background: '#4C6EF5', color: '#fff',
-            border: 0, borderRadius: 8, cursor: 'pointer',
-          }}>В работу</button>}
-        {o.status === 'in_progress' &&
-          <button onClick={() => setStatus(o.id, 'done')} style={{
-            flex: 1, padding: 10, background: '#66BB6A', color: '#fff',
-            border: 0, borderRadius: 8, cursor: 'pointer',
-          }}>Выполнен</button>}
-        {o.status !== 'done' && o.status !== 'canceled' &&
-          <button onClick={() => setStatus(o.id, 'canceled')} style={{
-            flex: 1, padding: 10, background: '#fff', color: '#EF5350',
-            border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer',
-          }}>Отменить</button>}
-      </div>
-    </div>)}
-  </div>;
+  return React.createElement('div', null,
+    React.createElement('select', {
+      style: Object.assign({}, inputStyle, { marginBottom: 12 }),
+      value: filter,
+      onChange: function(e) { setFilter(e.target.value); },
+    },
+      React.createElement('option', { value: '' }, 'Все заказы'),
+      Object.keys(STATUSES).map(function(k) {
+        return React.createElement('option', { key: k, value: k }, STATUSES[k].label);
+      })
+    ),
+    loading && React.createElement('p', { style: { color: '#888' } }, 'Загрузка…'),
+    !loading && !orders.length && React.createElement('p', { style: { color: '#888' } }, 'Заказов нет'),
+    orders.map(function(o) {
+      return React.createElement('div', {
+        key: o.id,
+        style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' }
+      },
+        React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 } },
+          React.createElement('b', null, '#' + o.id + ' · ' + (o.task_type === 'pickup' ? 'Забрать' : 'Купить')),
+          React.createElement(StatusBadge, { status: o.status })
+        ),
+        React.createElement('p', { style: { margin: '6px 0' } }, o.description),
+        o.pickup_addr && React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Откуда: ' + o.pickup_addr),
+        React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Куда: ' + o.delivery_addr),
+        React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } },
+          'Зона: ' + ((ZONES[o.zone] || {}).label || '') + ' — ' + o.price + ' ₽'
+        ),
+        React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } },
+          'Тел: ' + o.phone + ' · ' + (o.customer_name || '—')
+        ),
+        React.createElement('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
+          o.status === 'new' && React.createElement('button', {
+            onClick: function() { accept(o.id); },
+            style: { flex: 1, padding: 10, background: '#4C6EF5', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' }
+          }, 'Принять'),
+          o.status === 'accepted' && React.createElement('button', {
+            onClick: function() { setStatus(o.id, 'in_progress'); },
+            style: { flex: 1, padding: 10, background: '#4C6EF5', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' }
+          }, 'В работу'),
+          o.status === 'in_progress' && React.createElement('button', {
+            onClick: function() { setStatus(o.id, 'done'); },
+            style: { flex: 1, padding: 10, background: '#66BB6A', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' }
+          }, 'Выполнен'),
+          o.status !== 'done' && o.status !== 'canceled' && React.createElement('button', {
+            onClick: function() { setStatus(o.id, 'canceled'); },
+            style: { flex: 1, padding: 10, background: '#fff', color: '#EF5350', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer' }
+          }, 'Отменить')
+        )
+      );
+    })
+  );
 }
 
-// ─── Главный компонент ───
 function App() {
   const [tab, setTab] = useState('new');
-  const user = Max.user();
+  const user = getUser();
 
-  useEffect(() => { Max.init(); }, []);
+  useEffect(function() {
+    try {
+      if (window.WebApp && typeof window.WebApp.ready === 'function') window.WebApp.ready();
+      if (window.WebApp && typeof window.WebApp.expand === 'function') window.WebApp.expand();
+    } catch (e) { /* ignore */ }
+  }, []);
 
-  return <React.Fragment>
-    <header style={{
-      display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-      padding: '12px 16px', background: '#fff', borderBottom: '1px solid #eee',
-    }}>
-      <h1 style={{ margin: 0, fontSize: 18 }}>🚚 Лиантор Доставка</h1>
-      {user && <span style={{ fontSize: 13, color: '#666' }}>{user.first_name || 'Гость'}</span>}
-    </header>
-
-    <main style={{ flex: 1, padding: 16, overflowY: 'auto' }}>
-      {tab === 'new'     && <NewOrder onDone={() => setTab('orders')} />}
-      {tab === 'orders'  && <MyOrders />}
-      {tab === 'courier' && <CourierPanel />}
-    </main>
-
-    <nav style={{ display: 'flex', borderTop: '1px solid #eee', background: '#fff' }}>
-      <NavBtn active={tab === 'new'}     onClick={() => setTab('new')}>Новый</NavBtn>
-      <NavBtn active={tab === 'orders'}  onClick={() => setTab('orders')}>Мои</NavBtn>
-      <NavBtn active={tab === 'courier'} onClick={() => setTab('courier')}>Курьер</NavBtn>
-    </nav>
-  </React.Fragment>;
+  return React.createElement(React.Fragment, null,
+    React.createElement('header', {
+      style: {
+        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+        padding: '12px 16px', background: '#fff', borderBottom: '1px solid #eee',
+      }
+    },
+      React.createElement('h1', { style: { margin: 0, fontSize: 18 } }, '🚚 Лиантор Доставка'),
+      user && React.createElement('span', { style: { fontSize: 13, color: '#666' } }, user.first_name || 'Гость')
+    ),
+    React.createElement('main', { style: { flex: 1, padding: 16, overflowY: 'auto' } },
+      tab === 'new' && React.createElement(NewOrder, { onDone: function() { setTab('orders'); } }),
+      tab === 'orders' && React.createElement(MyOrders),
+      tab === 'courier' && React.createElement(CourierPanel)
+    ),
+    React.createElement('nav', { style: { display: 'flex', borderTop: '1px solid #eee', background: '#fff' } },
+      React.createElement(NavBtn, { active: tab === 'new', onClick: function() { setTab('new'); } }, 'Новый'),
+      React.createElement(NavBtn, { active: tab === 'orders', onClick: function() { setTab('orders'); } }, 'Мои'),
+      React.createElement(NavBtn, { active: tab === 'courier', onClick: function() { setTab('courier'); } }, 'Курьер')
+    )
+  );
 }
 
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+ReactDOM.createRoot(document.getElementById('root')).render(React.createElement(App));
 </script>
 </body>
 </html>
