@@ -20,7 +20,7 @@
 <div id="root"></div>
 
 <script type="text/babel" data-presets="react">
-const { useState, useEffect, useCallback } = React;
+const { useState, useEffect } = React;
 
 const API_URL = "https://lyantor-delivery-api.9chingis.workers.dev";
 
@@ -48,10 +48,7 @@ async function apiRequest(path, options) {
   options = options || {};
   const res = await fetch(API_URL + path, {
     method: options.method || 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-max-init-data': getInitData(),
-    },
+    headers: { 'Content-Type': 'application/json', 'x-max-init-data': getInitData() },
     body: options.body,
   });
   if (!res.ok) {
@@ -65,24 +62,25 @@ const api = {
   me:             function() { return apiRequest('/api/me'); },
   createOrder:    function(p) { return apiRequest('/api/orders', { method: 'POST', body: JSON.stringify(p) }); },
   myOrders:       function() { return apiRequest('/api/orders/my'); },
+  cancelOrder:    function(id) { return apiRequest('/api/orders/' + id + '/cancel', { method: 'POST' }); },
   courierRequest: function() { return apiRequest('/api/courier/request', { method: 'POST' }); },
   courierStatus:  function() { return apiRequest('/api/courier/status'); },
+  courierSetPhone: function(phone) { return apiRequest('/api/courier/phone', { method: 'POST', body: JSON.stringify({ phone: phone }) }); },
   courierOrders:  function(s) { return apiRequest('/api/courier/orders' + (s ? '?status=' + s : '')); },
   courierAccept:  function(id) { return apiRequest('/api/courier/orders/' + id + '/accept', { method: 'POST' }); },
   courierSetStatus: function(id, s) { return apiRequest('/api/courier/orders/' + id + '/status', { method: 'PATCH', body: JSON.stringify({ status: s }) }); },
   adminRequests:  function() { return apiRequest('/api/admin/requests'); },
   adminCouriers:  function() { return apiRequest('/api/admin/couriers'); },
+  adminStats:     function() { return apiRequest('/api/admin/stats'); },
   adminApprove:   function(id) { return apiRequest('/api/admin/approve/' + id, { method: 'POST' }); },
   adminRemove:    function(id) { return apiRequest('/api/admin/remove/' + id, { method: 'DELETE' }); },
 };
-
-// ═══════════ КОМПОНЕНТЫ ═══════════
 
 function NavBtn(props) {
   return React.createElement('button', {
     onClick: props.onClick,
     style: {
-      flex: 1, padding: 14, border: 0, background: 'transparent', fontSize: 14,
+      flex: 1, padding: 12, border: 0, background: 'transparent', fontSize: 13,
       color: props.active ? '#4C6EF5' : '#888',
       fontWeight: props.active ? 700 : 400, cursor: 'pointer',
     }
@@ -111,47 +109,29 @@ function ToggleBtn(props) {
 function StatusBadge(props) {
   const st = STATUSES[props.status] || { label: props.status, color: '#999' };
   return React.createElement('span', {
-    style: {
-      background: st.color, color: '#fff', borderRadius: 12,
-      padding: '2px 10px', fontSize: 12, fontWeight: 600,
-    }
+    style: { background: st.color, color: '#fff', borderRadius: 12, padding: '2px 10px', fontSize: 12, fontWeight: 600 }
   }, st.label);
 }
 
-// ─── Форма нового заказа ───
+// ─── Новый заказ ───
 function NewOrder(props) {
   const [form, setForm] = useState({
     task_type: 'pickup', description: '', pickup_addr: '', delivery_addr: '',
     zone: 'city', phone: '', customer_name: '', comment: '',
   });
   const [sending, setSending] = useState(false);
-
-  function set(k, v) {
-    setForm(function(f) {
-      const next = Object.assign({}, f);
-      next[k] = v;
-      return next;
-    });
-  }
-
+  function set(k, v) { setForm(function(f) { const n = Object.assign({}, f); n[k] = v; return n; }); }
   const price = ZONES[form.zone].price;
   const inputStyle = { width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 15 };
 
   async function submit() {
-    if (!form.phone || !form.description || !form.delivery_addr) {
-      alert('Заполните телефон, описание и адрес доставки');
-      return;
-    }
+    if (!form.phone || !form.description || !form.delivery_addr) { alert('Заполните телефон, описание и адрес'); return; }
     setSending(true);
     try {
       await api.createOrder(form);
       alert('Заказ принят! К оплате курьеру: ' + price + ' ₽');
       props.onDone();
-    } catch (e) {
-      alert(e.message || 'Ошибка');
-    } finally {
-      setSending(false);
-    }
+    } catch (e) { alert(e.message || 'Ошибка'); } finally { setSending(false); }
   }
 
   return React.createElement('div', null,
@@ -160,65 +140,33 @@ function NewOrder(props) {
       React.createElement(ToggleBtn, { active: form.task_type === 'buy', onClick: function() { set('task_type', 'buy'); } }, 'Купить')
     ),
     React.createElement(Field, { label: 'Что нужно сделать' },
-      React.createElement('textarea', {
-        style: Object.assign({}, inputStyle, { resize: 'vertical' }), rows: 3,
-        value: form.description,
+      React.createElement('textarea', { style: Object.assign({}, inputStyle, { resize: 'vertical' }), rows: 3, value: form.description,
         onChange: function(e) { set('description', e.target.value); },
-        placeholder: form.task_type === 'pickup' ? 'Забрать документы из офиса №5' : 'Купить хлеб, молоко 2 л',
-      })
+        placeholder: form.task_type === 'pickup' ? 'Забрать документы из офиса №5' : 'Купить хлеб, молоко 2 л' })
     ),
     form.task_type === 'pickup' && React.createElement(Field, { label: 'Откуда забрать' },
-      React.createElement('input', {
-        style: inputStyle, value: form.pickup_addr,
-        onChange: function(e) { set('pickup_addr', e.target.value); },
-        placeholder: 'Улица, дом, кв.',
-      })
+      React.createElement('input', { style: inputStyle, value: form.pickup_addr, onChange: function(e) { set('pickup_addr', e.target.value); }, placeholder: 'Улица, дом, кв.' })
     ),
     React.createElement(Field, { label: 'Куда доставить' },
-      React.createElement('input', {
-        style: inputStyle, value: form.delivery_addr,
-        onChange: function(e) { set('delivery_addr', e.target.value); },
-        placeholder: 'Улица, дом, кв.',
-      })
+      React.createElement('input', { style: inputStyle, value: form.delivery_addr, onChange: function(e) { set('delivery_addr', e.target.value); }, placeholder: 'Улица, дом, кв.' })
     ),
     React.createElement(Field, { label: 'Зона доставки' },
-      React.createElement('select', {
-        style: inputStyle, value: form.zone,
-        onChange: function(e) { set('zone', e.target.value); },
-      },
-        Object.keys(ZONES).map(function(k) {
-          return React.createElement('option', { key: k, value: k }, ZONES[k].label + ' — ' + ZONES[k].price + ' ₽');
-        })
+      React.createElement('select', { style: inputStyle, value: form.zone, onChange: function(e) { set('zone', e.target.value); } },
+        Object.keys(ZONES).map(function(k) { return React.createElement('option', { key: k, value: k }, ZONES[k].label + ' — ' + ZONES[k].price + ' ₽'); })
       )
     ),
     React.createElement(Field, { label: 'Ваше имя' },
-      React.createElement('input', {
-        style: inputStyle, value: form.customer_name,
-        onChange: function(e) { set('customer_name', e.target.value); },
-      })
+      React.createElement('input', { style: inputStyle, value: form.customer_name, onChange: function(e) { set('customer_name', e.target.value); } })
     ),
     React.createElement(Field, { label: 'Телефон' },
-      React.createElement('input', {
-        style: inputStyle, type: 'tel', value: form.phone,
-        onChange: function(e) { set('phone', e.target.value); },
-        placeholder: '+7...',
-      })
+      React.createElement('input', { style: inputStyle, type: 'tel', value: form.phone, onChange: function(e) { set('phone', e.target.value); }, placeholder: '+7...' })
     ),
     React.createElement(Field, { label: 'Комментарий' },
-      React.createElement('input', {
-        style: inputStyle, value: form.comment,
-        onChange: function(e) { set('comment', e.target.value); },
-      })
+      React.createElement('input', { style: inputStyle, value: form.comment, onChange: function(e) { set('comment', e.target.value); } })
     ),
-    React.createElement('div', { style: { marginTop: 16, fontSize: 18, fontWeight: 700 } },
-      'Итого: ' + price + ' ₽ (оплата курьеру)'
-    ),
-    React.createElement('button', {
-      onClick: submit, disabled: sending,
-      style: {
-        marginTop: 12, width: '100%', padding: 14, background: '#4C6EF5',
-        color: '#fff', border: 0, borderRadius: 8, fontSize: 16, cursor: 'pointer',
-      }
+    React.createElement('div', { style: { marginTop: 16, fontSize: 18, fontWeight: 700 } }, 'Итого: ' + price + ' ₽ (оплата курьеру)'),
+    React.createElement('button', { onClick: submit, disabled: sending,
+      style: { marginTop: 12, width: '100%', padding: 14, background: '#4C6EF5', color: '#fff', border: 0, borderRadius: 8, fontSize: 16, cursor: 'pointer' }
     }, sending ? 'Отправка…' : 'Оформить заказ')
   );
 }
@@ -228,18 +176,24 @@ function MyOrders() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(function() {
+  function load() {
+    setLoading(true);
     api.myOrders().then(setOrders).catch(function(e) { alert(e.message); }).finally(function() { setLoading(false); });
-  }, []);
+  }
+  useEffect(load, []);
+
+  async function cancel(id) {
+    if (!confirm('Отменить заказ #' + id + '?')) return;
+    try { await api.cancelOrder(id); load(); }
+    catch (e) { alert(e.message === 'cannot_cancel' ? 'Заказ уже взят курьером. Свяжитесь с ним напрямую.' : e.message); }
+  }
 
   if (loading) return React.createElement('p', { style: { color: '#888' } }, 'Загрузка…');
   if (!orders.length) return React.createElement('p', { style: { color: '#888' } }, 'У вас пока нет заказов');
 
   return React.createElement('div', null, orders.map(function(o) {
-    return React.createElement('div', {
-      key: o.id,
-      style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' }
-    },
+    return React.createElement('div', { key: o.id,
+      style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' } },
       React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 } },
         React.createElement('b', null, 'Заказ #' + o.id),
         React.createElement(StatusBadge, { status: o.status })
@@ -249,50 +203,68 @@ function MyOrders() {
       React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Куда: ' + o.delivery_addr),
       React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } },
         'Зона: ' + ((ZONES[o.zone] || {}).label || '') + ' — ' + o.price + ' ₽'
-      )
+      ),
+      o.courier_name && React.createElement('div', { style: { marginTop: 10, padding: 10, background: '#f0f5ff', borderRadius: 8 } },
+        React.createElement('p', { style: { margin: 0, fontSize: 13, fontWeight: 600 } }, '🚚 Курьер: ' + o.courier_name),
+        o.courier_phone && React.createElement('p', { style: { margin: '4px 0 0 0', fontSize: 13 } }, '📱 СБП: ' + o.courier_phone)
+      ),
+      o.status === 'new' && React.createElement('button', { onClick: function() { cancel(o.id); },
+        style: { marginTop: 10, width: '100%', padding: 10, background: '#fff', color: '#EF5350', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer' }
+      }, 'Отменить заказ')
     );
   }));
 }
 
-// ─── Панель курьера ───
-function CourierPanel() {
+// ─── Курьер: панель ───
+function CourierPanel(props) {
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [phone, setPhone] = useState(props.phone || '');
+  const [savingPhone, setSavingPhone] = useState(false);
 
   function load() {
     setLoading(true);
-    api.courierOrders(filter || undefined)
-      .then(setOrders)
-      .catch(function(e) { alert(e.message); })
-      .finally(function() { setLoading(false); });
+    api.courierOrders(filter || undefined).then(setOrders).catch(function(e) { alert(e.message); }).finally(function() { setLoading(false); });
   }
-
   useEffect(load, [filter]);
 
-  function accept(id) { api.courierAccept(id).then(load); }
+  function accept(id) {
+    api.courierAccept(id).then(load).catch(function(e) {
+      if (e.message === 'already_taken') alert('Заказ уже взят другим курьером');
+      else alert(e.message);
+    });
+  }
   function setStatus(id, s) { api.courierSetStatus(id, s).then(load); }
+
+  async function savePhone() {
+    setSavingPhone(true);
+    try { await api.courierSetPhone(phone); alert('Номер сохранён!'); props.onPhoneChange(phone); }
+    catch (e) { alert(e.message); } finally { setSavingPhone(false); }
+  }
 
   const inputStyle = { width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 15, background: '#fff' };
 
   return React.createElement('div', null,
-    React.createElement('select', {
-      style: Object.assign({}, inputStyle, { marginBottom: 12 }),
-      value: filter,
-      onChange: function(e) { setFilter(e.target.value); },
-    },
+    // Профиль: телефон для СБП
+    React.createElement('div', { style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' } },
+      React.createElement('p', { style: { margin: '0 0 8px 0', fontWeight: 600, fontSize: 14 } }, '📱 Мой номер для СБП'),
+      React.createElement('p', { style: { margin: '0 0 8px 0', fontSize: 12, color: '#888' } }, 'Клиент увидит этот номер, чтобы перевести оплату.'),
+      React.createElement('input', { style: inputStyle, value: phone, onChange: function(e) { setPhone(e.target.value); }, placeholder: '+7 999 123-45-67' }),
+      React.createElement('button', { onClick: savePhone, disabled: savingPhone,
+        style: { marginTop: 8, width: '100%', padding: 10, background: '#4C6EF5', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' }
+      }, savingPhone ? 'Сохранение…' : 'Сохранить номер')
+    ),
+
+    React.createElement('select', { style: Object.assign({}, inputStyle, { marginBottom: 12 }), value: filter, onChange: function(e) { setFilter(e.target.value); } },
       React.createElement('option', { value: '' }, 'Все заказы'),
-      Object.keys(STATUSES).map(function(k) {
-        return React.createElement('option', { key: k, value: k }, STATUSES[k].label);
-      })
+      Object.keys(STATUSES).map(function(k) { return React.createElement('option', { key: k, value: k }, STATUSES[k].label); })
     ),
     loading && React.createElement('p', { style: { color: '#888' } }, 'Загрузка…'),
     !loading && !orders.length && React.createElement('p', { style: { color: '#888' } }, 'Заказов нет'),
     orders.map(function(o) {
-      return React.createElement('div', {
-        key: o.id,
-        style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' }
-      },
+      return React.createElement('div', { key: o.id,
+        style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' } },
         React.createElement('div', { style: { display: 'flex', justifyContent: 'space-between', marginBottom: 8 } },
           React.createElement('b', null, '#' + o.id + ' · ' + (o.task_type === 'pickup' ? 'Забрать' : 'Купить')),
           React.createElement(StatusBadge, { status: o.status })
@@ -300,36 +272,25 @@ function CourierPanel() {
         React.createElement('p', { style: { margin: '6px 0' } }, o.description),
         o.pickup_addr && React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Откуда: ' + o.pickup_addr),
         React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Куда: ' + o.delivery_addr),
-        React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } },
-          'Зона: ' + ((ZONES[o.zone] || {}).label || '') + ' — ' + o.price + ' ₽'
-        ),
-        React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } },
-          'Тел: ' + o.phone + ' · ' + (o.customer_name || '—')
-        ),
+        React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Зона: ' + ((ZONES[o.zone] || {}).label || '') + ' — ' + o.price + ' ₽'),
+        React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Тел: ' + o.phone + ' · ' + (o.customer_name || '—')),
+        o.courier_name && React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#4C6EF5', fontWeight: 600 } }, 'Взял: ' + o.courier_name),
         React.createElement('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
-          o.status === 'new' && React.createElement('button', {
-            onClick: function() { accept(o.id); },
-            style: { flex: 1, padding: 10, background: '#4C6EF5', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' }
-          }, 'Принять'),
-          o.status === 'accepted' && React.createElement('button', {
-            onClick: function() { setStatus(o.id, 'in_progress'); },
-            style: { flex: 1, padding: 10, background: '#4C6EF5', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' }
-          }, 'В работу'),
-          o.status === 'in_progress' && React.createElement('button', {
-            onClick: function() { setStatus(o.id, 'done'); },
-            style: { flex: 1, padding: 10, background: '#66BB6A', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' }
-          }, 'Выполнен'),
-          o.status !== 'done' && o.status !== 'canceled' && React.createElement('button', {
-            onClick: function() { setStatus(o.id, 'canceled'); },
-            style: { flex: 1, padding: 10, background: '#fff', color: '#EF5350', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer' }
-          }, 'Отменить')
+          o.status === 'new' && React.createElement('button', { onClick: function() { accept(o.id); },
+            style: { flex: 1, padding: 10, background: '#4C6EF5', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' } }, 'Принять'),
+          o.status === 'accepted' && React.createElement('button', { onClick: function() { setStatus(o.id, 'in_progress'); },
+            style: { flex: 1, padding: 10, background: '#4C6EF5', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' } }, 'В работу'),
+          o.status === 'in_progress' && React.createElement('button', { onClick: function() { setStatus(o.id, 'done'); },
+            style: { flex: 1, padding: 10, background: '#66BB6A', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' } }, 'Выполнен'),
+          o.status !== 'done' && o.status !== 'canceled' && React.createElement('button', { onClick: function() { setStatus(o.id, 'canceled'); },
+            style: { flex: 1, padding: 10, background: '#fff', color: '#EF5350', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer' } }, 'Отменить')
         )
       );
     })
   );
 }
 
-// ─── Панель курьера: запрос доступа ───
+// ─── Курьер: заявка ───
 function CourierRequest() {
   const [status, setStatus] = useState('loading');
   const [sending, setSending] = useState(false);
@@ -337,58 +298,42 @@ function CourierRequest() {
   function refresh() {
     api.courierStatus().then(function(r) { setStatus(r.status); }).catch(function() { setStatus('none'); });
   }
-
   useEffect(refresh, []);
 
   async function request() {
     setSending(true);
-    try {
-      const r = await api.courierRequest();
-      setStatus(r.status);
-      alert('Заявка отправлена! Ожидайте подтверждения администратора.');
-    } catch (e) {
-      alert(e.message || 'Ошибка');
-    } finally {
-      setSending(false);
-    }
+    try { const r = await api.courierRequest(); setStatus(r.status); alert('Заявка отправлена!'); }
+    catch (e) { alert(e.message); } finally { setSending(false); }
   }
 
   if (status === 'loading') return React.createElement('p', { style: { color: '#888' } }, 'Загрузка…');
-
   if (status === 'approved') return React.createElement('p', { style: { color: '#66BB6A', fontWeight: 600 } }, '✅ Вы подтверждённый курьер.');
-
   if (status === 'pending') return React.createElement('div', null,
     React.createElement('p', { style: { color: '#FFA726', fontWeight: 600 } }, '⏳ Ваша заявка на рассмотрении.'),
     React.createElement('p', { style: { color: '#888', fontSize: 13 } }, 'Администратор подтвердит доступ в ближайшее время.')
   );
-
   return React.createElement('div', null,
-    React.createElement('p', { style: { color: '#888', marginBottom: 12 } }, 'Хотите стать курьером? Отправьте заявку — администратор её рассмотрит.'),
-    React.createElement('button', {
-      onClick: request, disabled: sending,
-      style: {
-        width: '100%', padding: 14, background: '#4C6EF5', color: '#fff',
-        border: 0, borderRadius: 8, fontSize: 16, cursor: 'pointer',
-      }
+    React.createElement('p', { style: { color: '#888', marginBottom: 12 } }, 'Хотите стать курьером? Отправьте заявку.'),
+    React.createElement('button', { onClick: request, disabled: sending,
+      style: { width: '100%', padding: 14, background: '#4C6EF5', color: '#fff', border: 0, borderRadius: 8, fontSize: 16, cursor: 'pointer' }
     }, sending ? 'Отправка…' : 'Стать курьером')
   );
 }
 
-// ─── Админ-панель ───
+// ─── Админ ───
 function AdminPanel() {
   const [tab, setTab] = useState('requests');
   const [requests, setRequests] = useState([]);
   const [couriers, setCouriers] = useState([]);
+  const [stats, setStats] = useState([]);
   const [loading, setLoading] = useState(true);
 
   function load() {
     setLoading(true);
-    Promise.all([api.adminRequests(), api.adminCouriers()])
-      .then(function(r) { setRequests(r[0]); setCouriers(r[1]); })
-      .catch(function(e) { alert(e.message); })
-      .finally(function() { setLoading(false); });
+    Promise.all([api.adminRequests(), api.adminCouriers(), api.adminStats()])
+      .then(function(r) { setRequests(r[0]); setCouriers(r[1]); setStats(r[2]); })
+      .catch(function(e) { alert(e.message); }).finally(function() { setLoading(false); });
   }
-
   useEffect(load, []);
 
   function approve(id) { api.adminApprove(id).then(load); }
@@ -396,91 +341,90 @@ function AdminPanel() {
 
   if (loading) return React.createElement('p', { style: { color: '#888' } }, 'Загрузка…');
 
-  const inputStyle = { width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 15, background: '#fff' };
-
   return React.createElement('div', null,
-    React.createElement('div', { style: { display: 'flex', gap: 8, marginBottom: 14 } },
+    React.createElement('div', { style: { display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' } },
       React.createElement(ToggleBtn, { active: tab === 'requests', onClick: function() { setTab('requests'); } }, 'Заявки (' + requests.length + ')'),
-      React.createElement(ToggleBtn, { active: tab === 'couriers', onClick: function() { setTab('couriers'); } }, 'Курьеры (' + couriers.length + ')')
+      React.createElement(ToggleBtn, { active: tab === 'couriers', onClick: function() { setTab('couriers'); } }, 'Курьеры (' + couriers.length + ')'),
+      React.createElement(ToggleBtn, { active: tab === 'stats', onClick: function() { setTab('stats'); } }, 'Статистика')
     ),
-
     tab === 'requests' && React.createElement('div', null,
       !requests.length && React.createElement('p', { style: { color: '#888' } }, 'Новых заявок нет'),
       requests.map(function(r) {
-        return React.createElement('div', {
-          key: r.user_id,
-          style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' }
-        },
+        return React.createElement('div', { key: r.user_id,
+          style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' } },
           React.createElement('p', { style: { margin: '0 0 4px 0', fontWeight: 600 } }, (r.first_name || 'Без имени') + ' (' + r.user_id + ')'),
           r.username && React.createElement('p', { style: { margin: '0 0 8px 0', fontSize: 13, color: '#888' } }, '@' + r.username),
-          React.createElement('p', { style: { margin: '0 0 10px 0', fontSize: 12, color: '#aaa' } }, 'Заявка: ' + r.added_at),
           React.createElement('div', { style: { display: 'flex', gap: 8 } },
-            React.createElement('button', {
-              onClick: function() { approve(r.user_id); },
-              style: { flex: 1, padding: 10, background: '#66BB6A', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' }
-            }, 'Подтвердить'),
-            React.createElement('button', {
-              onClick: function() { remove(r.user_id); },
-              style: { flex: 1, padding: 10, background: '#fff', color: '#EF5350', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer' }
-            }, 'Отклонить')
+            React.createElement('button', { onClick: function() { approve(r.user_id); },
+              style: { flex: 1, padding: 10, background: '#66BB6A', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' } }, 'Подтвердить'),
+            React.createElement('button', { onClick: function() { remove(r.user_id); },
+              style: { flex: 1, padding: 10, background: '#fff', color: '#EF5350', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer' } }, 'Отклонить')
           )
         );
       })
     ),
-
     tab === 'couriers' && React.createElement('div', null,
       !couriers.length && React.createElement('p', { style: { color: '#888' } }, 'Курьеров пока нет'),
       couriers.map(function(c) {
-        return React.createElement('div', {
-          key: c.user_id,
-          style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' }
-        },
+        return React.createElement('div', { key: c.user_id,
+          style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' } },
           React.createElement('p', { style: { margin: '0 0 4px 0', fontWeight: 600 } }, (c.first_name || 'Без имени') + ' (' + c.user_id + ')'),
-          c.username && React.createElement('p', { style: { margin: '0 0 8px 0', fontSize: 13, color: '#888' } }, '@' + c.username),
-          React.createElement('p', { style: { margin: '0 0 10px 0', fontSize: 12, color: '#aaa' } }, 'Добавлен: ' + c.added_at),
-          React.createElement('button', {
-            onClick: function() { remove(c.user_id); },
-            style: { width: '100%', padding: 10, background: '#fff', color: '#EF5350', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer' }
-          }, 'Удалить курьера')
+          c.username && React.createElement('p', { style: { margin: '0 0 4px 0', fontSize: 13, color: '#888' } }, '@' + c.username),
+          React.createElement('p', { style: { margin: '0 0 10px 0', fontSize: 13, color: c.phone ? '#4C6EF5' : '#EF5350' } },
+            c.phone ? '📱 СБП: ' + c.phone : '⚠️ Номер СБП не указан'
+          ),
+          React.createElement('button', { onClick: function() { remove(c.user_id); },
+            style: { width: '100%', padding: 10, background: '#fff', color: '#EF5350', border: '1px solid #ddd', borderRadius: 8, cursor: 'pointer' } }, 'Удалить курьера')
+        );
+      })
+    ),
+    tab === 'stats' && React.createElement('div', null,
+      !stats.length && React.createElement('p', { style: { color: '#888' } }, 'Статистики пока нет'),
+      stats.map(function(s) {
+        return React.createElement('div', { key: s.courier_id,
+          style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' } },
+          React.createElement('p', { style: { margin: '0 0 6px 0', fontWeight: 600 } }, s.courier_name || ('ID ' + s.courier_id)),
+          React.createElement('p', { style: { margin: '2px 0', fontSize: 13 } }, 'Всего заказов: ' + s.total),
+          React.createElement('p', { style: { margin: '2px 0', fontSize: 13, color: '#66BB6A' } }, '✅ Выполнено: ' + s.done),
+          React.createElement('p', { style: { margin: '2px 0', fontSize: 13, color: '#EF5350' } }, '❌ Отменено: ' + s.canceled),
+          React.createElement('p', { style: { margin: '6px 0 0 0', fontSize: 14, fontWeight: 700 } }, 'Выручка: ' + s.revenue + ' ₽')
         );
       })
     )
   );
 }
 
-// ─── Главный компонент ───
+// ─── Главный ───
 function App() {
   const [tab, setTab] = useState('new');
   const [me, setMe] = useState(null);
+
+  function reloadMe() {
+    api.me().then(setMe).catch(function() {
+      setMe({ id: 0, is_courier: false, is_admin: false, courier_status: 'none', courier_phone: null });
+    });
+  }
 
   useEffect(function() {
     try {
       if (window.WebApp && typeof window.WebApp.ready === 'function') window.WebApp.ready();
       if (window.WebApp && typeof window.WebApp.expand === 'function') window.WebApp.expand();
-    } catch (e) { /* ignore */ }
-
-    api.me()
-      .then(setMe)
-      .catch(function() { setMe({ id: 0, is_courier: false, is_admin: false, courier_status: 'none' }); });
+    } catch (e) {}
+    reloadMe();
   }, []);
 
   const isCourier = me && (me.is_courier || me.is_admin);
   const isAdmin = me && me.is_admin;
 
   return React.createElement(React.Fragment, null,
-    React.createElement('header', {
-      style: {
-        display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-        padding: '12px 16px', background: '#fff', borderBottom: '1px solid #eee',
-      }
-    },
+    React.createElement('header', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', background: '#fff', borderBottom: '1px solid #eee' } },
       React.createElement('h1', { style: { margin: 0, fontSize: 18 } }, '🚚 Лянтор Доставка'),
       me && React.createElement('span', { style: { fontSize: 13, color: '#666' } }, me.first_name || 'Гость')
     ),
     React.createElement('main', { style: { flex: 1, padding: 16, overflowY: 'auto' } },
       tab === 'new' && React.createElement(NewOrder, { onDone: function() { setTab('orders'); } }),
       tab === 'orders' && React.createElement(MyOrders),
-      tab === 'courier' && isCourier && React.createElement(CourierPanel),
+      tab === 'courier' && isCourier && React.createElement(CourierPanel, { phone: me && me.courier_phone, onPhoneChange: function(p) { setMe(Object.assign({}, me, { courier_phone: p })); } }),
       tab === 'courier-request' && React.createElement(CourierRequest),
       tab === 'admin' && isAdmin && React.createElement(AdminPanel)
     ),
