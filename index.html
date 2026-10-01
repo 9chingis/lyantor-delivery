@@ -45,7 +45,11 @@ const STATUSES = {
 const Max = {
   initData() { return (window.WebApp && window.WebApp.initData) || ''; },
   user() { return (window.WebApp && window.WebApp.initDataUnsafe && window.WebApp.initDataUnsafe.user) || null; },
-  init() { if (window.WebApp) { window.WebApp.ready(); window.WebApp.expand(); } },
+  init() {
+    // MAX Bridge не требует вызова ready() и expand() —
+    // объект window.WebApp уже готов к работе.
+    // Ничего делать не нужно.
+  }, { window.WebApp.ready(); window.WebApp.expand(); } },
   close() { if (window.WebApp) window.WebApp.close(); },
 };
 
