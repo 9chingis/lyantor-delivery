@@ -63,6 +63,9 @@ const api = {
   createOrder:    function(p) { return apiRequest('/api/orders', { method: 'POST', body: JSON.stringify(p) }); },
   myOrders:       function() { return apiRequest('/api/orders/my'); },
   cancelOrder:    function(id) { return apiRequest('/api/orders/' + id + '/cancel', { method: 'POST' }); },
+  addresses:      function() { return apiRequest('/api/addresses'); },
+  saveAddress:    function(a) { return apiRequest('/api/addresses', { method: 'POST', body: JSON.stringify(a) }); },
+  deleteAddress:  function(id) { return apiRequest('/api/addresses/' + id, { method: 'DELETE' }); },
   courierRequest: function() { return apiRequest('/api/courier/request', { method: 'POST' }); },
   courierStatus:  function() { return apiRequest('/api/courier/status'); },
   courierSetPhone: function(phone) { return apiRequest('/api/courier/phone', { method: 'POST', body: JSON.stringify({ phone: phone }) }); },
@@ -75,6 +78,30 @@ const api = {
   adminApprove:   function(id) { return apiRequest('/api/admin/approve/' + id, { method: 'POST' }); },
   adminRemove:    function(id) { return apiRequest('/api/admin/remove/' + id, { method: 'DELETE' }); },
 };
+
+// ─── Хелперы отображения адреса ───
+function formatAddress(o) {
+  var street = o.delivery_street || '';
+  var house = o.delivery_house || '';
+  var base = (street && house) ? (street + ', ' + house) : (o.delivery_addr || '');
+  var parts = [base];
+  if (o.delivery_apartment) parts.push('кв. ' + o.delivery_apartment);
+  if (o.delivery_entrance) parts.push('под. ' + o.delivery_entrance);
+  if (o.delivery_floor) parts.push('эт. ' + o.delivery_floor);
+  if (o.delivery_intercom) parts.push('домофон ' + o.delivery_intercom);
+  return parts.filter(Boolean).join(', ');
+}
+
+function formatSavedAddress(a) {
+  var street = a.street || '';
+  var house = a.house || '';
+  var base = (street && house) ? (street + ', ' + house) : (a.address || '');
+  var parts = [base];
+  if (a.apartment) parts.push('кв. ' + a.apartment);
+  if (a.entrance) parts.push('под. ' + a.entrance);
+  if (a.floor) parts.push('эт. ' + a.floor);
+  return parts.filter(Boolean).join(', ');
+}
 
 function NavBtn(props) {
   return React.createElement('button', {
@@ -116,19 +143,48 @@ function StatusBadge(props) {
 // ─── Новый заказ ───
 function NewOrder(props) {
   const [form, setForm] = useState({
-    task_type: 'pickup', description: '', pickup_addr: '', delivery_addr: '',
+    task_type: 'pickup', description: '', pickup_addr: '',
+    delivery_street: '', delivery_house: '',
+    delivery_apartment: '', delivery_entrance: '',
+    delivery_floor: '', delivery_intercom: '',
     zone: 'city', phone: '', customer_name: '', comment: '',
   });
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [saveAddress, setSaveAddress] = useState(false);
   const [sending, setSending] = useState(false);
+
+  useEffect(function() {
+    api.addresses().then(setSavedAddresses).catch(function() {});
+  }, []);
+
   function set(k, v) { setForm(function(f) { const n = Object.assign({}, f); n[k] = v; return n; }); }
   const price = ZONES[form.zone].price;
   const inputStyle = { width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 15 };
 
+  function applySaved(addrId) {
+    if (!addrId) return;
+    const a = savedAddresses.find(function(x) { return String(x.id) === String(addrId); });
+    if (!a) return;
+    setForm(function(f) {
+      return Object.assign({}, f, {
+        delivery_street: a.street || '',
+        delivery_house: a.house || '',
+        delivery_apartment: a.apartment || '',
+        delivery_entrance: a.entrance || '',
+        delivery_floor: a.floor || '',
+        delivery_intercom: a.intercom || '',
+        comment: a.comment || f.comment,
+      });
+    });
+  }
+
   async function submit() {
-    if (!form.phone || !form.description || !form.delivery_addr) { alert('Заполните телефон, описание и адрес'); return; }
+    if (!form.phone || !form.description || !form.delivery_street || !form.delivery_house) {
+      alert('Заполните телефон, описание, улицу и дом'); return;
+    }
     setSending(true);
     try {
-      await api.createOrder(form);
+      await api.createOrder(Object.assign({}, form, { save_address: saveAddress }));
       alert('Заказ принят! К оплате курьеру: ' + price + ' ₽');
       props.onDone();
     } catch (e) { alert(e.message || 'Ошибка'); } finally { setSending(false); }
@@ -141,15 +197,78 @@ function NewOrder(props) {
     ),
     React.createElement(Field, { label: 'Что нужно сделать' },
       React.createElement('textarea', { style: Object.assign({}, inputStyle, { resize: 'vertical' }), rows: 3, value: form.description,
-        onChange: function(e) { set('description', e.target.value); },
-        placeholder: form.task_type === 'pickup' ? 'Забрать документы из офиса №5' : 'Купить хлеб, молоко 2 л' })
+        onChange: function(e) { set('description', e.target.value); } })
     ),
     form.task_type === 'pickup' && React.createElement(Field, { label: 'Откуда забрать' },
-      React.createElement('input', { style: inputStyle, value: form.pickup_addr, onChange: function(e) { set('pickup_addr', e.target.value); }, placeholder: 'Улица, дом, кв.' })
+      React.createElement('input', { style: inputStyle, value: form.pickup_addr, onChange: function(e) { set('pickup_addr', e.target.value); } })
     ),
-    React.createElement(Field, { label: 'Куда доставить' },
-      React.createElement('input', { style: inputStyle, value: form.delivery_addr, onChange: function(e) { set('delivery_addr', e.target.value); }, placeholder: 'Улица, дом, кв.' })
+
+    // ─── Блок адреса доставки ───
+    savedAddresses.length > 0 && React.createElement(Field, { label: 'Сохранённые адреса' },
+      React.createElement('select', {
+        style: inputStyle,
+        defaultValue: '',
+        onChange: function(e) { applySaved(e.target.value); }
+      },
+        React.createElement('option', { value: '' }, '— выбрать из сохранённых —'),
+        savedAddresses.map(function(a) {
+          return React.createElement('option', { key: a.id, value: a.id }, formatSavedAddress(a));
+        })
+      )
     ),
+
+    // Улица | Дом
+    React.createElement('div', { style: { display: 'flex', gap: 8 } },
+      React.createElement('div', { style: { flex: 2 } },
+        React.createElement(Field, { label: 'Улица' },
+          React.createElement('input', { style: inputStyle, value: form.delivery_street, onChange: function(e) { set('delivery_street', e.target.value); } })
+        )
+      ),
+      React.createElement('div', { style: { flex: 1 } },
+        React.createElement(Field, { label: 'Дом' },
+          React.createElement('input', { style: inputStyle, value: form.delivery_house, onChange: function(e) { set('delivery_house', e.target.value); } })
+        )
+      )
+    ),
+
+    // Кв. | Подъезд
+    React.createElement('div', { style: { display: 'flex', gap: 8 } },
+      React.createElement('div', { style: { flex: 1 } },
+        React.createElement(Field, { label: 'Кв. или офис' },
+          React.createElement('input', { style: inputStyle, value: form.delivery_apartment, onChange: function(e) { set('delivery_apartment', e.target.value); } })
+        )
+      ),
+      React.createElement('div', { style: { flex: 1 } },
+        React.createElement(Field, { label: 'Подъезд' },
+          React.createElement('input', { style: inputStyle, value: form.delivery_entrance, onChange: function(e) { set('delivery_entrance', e.target.value); } })
+        )
+      )
+    ),
+
+    // Этаж | Домофон
+    React.createElement('div', { style: { display: 'flex', gap: 8 } },
+      React.createElement('div', { style: { flex: 1 } },
+        React.createElement(Field, { label: 'Этаж' },
+          React.createElement('input', { style: inputStyle, value: form.delivery_floor, onChange: function(e) { set('delivery_floor', e.target.value); } })
+        )
+      ),
+      React.createElement('div', { style: { flex: 1 } },
+        React.createElement(Field, { label: 'Домофон' },
+          React.createElement('input', { style: inputStyle, value: form.delivery_intercom, onChange: function(e) { set('delivery_intercom', e.target.value); } })
+        )
+      )
+    ),
+
+    React.createElement(Field, { label: 'Комментарий курьеру' },
+      React.createElement('textarea', { style: Object.assign({}, inputStyle, { resize: 'vertical' }), rows: 3, value: form.comment,
+        onChange: function(e) { set('comment', e.target.value); } })
+    ),
+
+    React.createElement('label', { style: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, fontSize: 14, cursor: 'pointer' } },
+      React.createElement('input', { type: 'checkbox', checked: saveAddress, onChange: function(e) { setSaveAddress(e.target.checked); } }),
+      'Сохранить адрес для следующих заказов'
+    ),
+
     React.createElement(Field, { label: 'Зона доставки' },
       React.createElement('select', { style: inputStyle, value: form.zone, onChange: function(e) { set('zone', e.target.value); } },
         Object.keys(ZONES).map(function(k) { return React.createElement('option', { key: k, value: k }, ZONES[k].label + ' — ' + ZONES[k].price + ' ₽'); })
@@ -159,10 +278,7 @@ function NewOrder(props) {
       React.createElement('input', { style: inputStyle, value: form.customer_name, onChange: function(e) { set('customer_name', e.target.value); } })
     ),
     React.createElement(Field, { label: 'Телефон' },
-      React.createElement('input', { style: inputStyle, type: 'tel', value: form.phone, onChange: function(e) { set('phone', e.target.value); }, placeholder: '+7...' })
-    ),
-    React.createElement(Field, { label: 'Комментарий' },
-      React.createElement('input', { style: inputStyle, value: form.comment, onChange: function(e) { set('comment', e.target.value); } })
+      React.createElement('input', { style: inputStyle, type: 'tel', value: form.phone, onChange: function(e) { set('phone', e.target.value); } })
     ),
     React.createElement('div', { style: { marginTop: 16, fontSize: 18, fontWeight: 700 } }, 'Итого: ' + price + ' ₽ (оплата курьеру)'),
     React.createElement('button', { onClick: submit, disabled: sending,
@@ -200,10 +316,11 @@ function MyOrders() {
       ),
       React.createElement('p', { style: { margin: '6px 0' } }, o.description),
       o.pickup_addr && React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Откуда: ' + o.pickup_addr),
-      React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Куда: ' + o.delivery_addr),
+      React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Куда: ' + formatAddress(o)),
       React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } },
         'Зона: ' + ((ZONES[o.zone] || {}).label || '') + ' — ' + o.price + ' ₽'
       ),
+      o.comment && React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, '💬 ' + o.comment),
       o.courier_name && React.createElement('div', { style: { marginTop: 10, padding: 10, background: '#f0f5ff', borderRadius: 8 } },
         React.createElement('p', { style: { margin: 0, fontSize: 13, fontWeight: 600 } }, '🚚 Курьер: ' + o.courier_name),
         o.courier_phone && React.createElement('p', { style: { margin: '4px 0 0 0', fontSize: 13 } }, '📱 СБП: ' + o.courier_phone)
@@ -215,7 +332,7 @@ function MyOrders() {
   }));
 }
 
-// ─── Курьер: панель ───
+// ─── Курьер ───
 function CourierPanel(props) {
   const [orders, setOrders] = useState([]);
   const [filter, setFilter] = useState('');
@@ -246,16 +363,14 @@ function CourierPanel(props) {
   const inputStyle = { width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 15, background: '#fff' };
 
   return React.createElement('div', null,
-    // Профиль: телефон для СБП
     React.createElement('div', { style: { background: '#fff', borderRadius: 12, padding: 14, marginBottom: 12, boxShadow: '0 1px 3px rgba(0,0,0,.06)' } },
       React.createElement('p', { style: { margin: '0 0 8px 0', fontWeight: 600, fontSize: 14 } }, '📱 Мой номер для СБП'),
       React.createElement('p', { style: { margin: '0 0 8px 0', fontSize: 12, color: '#888' } }, 'Клиент увидит этот номер, чтобы перевести оплату.'),
-      React.createElement('input', { style: inputStyle, value: phone, onChange: function(e) { setPhone(e.target.value); }, placeholder: '+7 999 123-45-67' }),
+      React.createElement('input', { style: inputStyle, value: phone, onChange: function(e) { setPhone(e.target.value); } }),
       React.createElement('button', { onClick: savePhone, disabled: savingPhone,
         style: { marginTop: 8, width: '100%', padding: 10, background: '#4C6EF5', color: '#fff', border: 0, borderRadius: 8, cursor: 'pointer' }
       }, savingPhone ? 'Сохранение…' : 'Сохранить номер')
     ),
-
     React.createElement('select', { style: Object.assign({}, inputStyle, { marginBottom: 12 }), value: filter, onChange: function(e) { setFilter(e.target.value); } },
       React.createElement('option', { value: '' }, 'Все заказы'),
       Object.keys(STATUSES).map(function(k) { return React.createElement('option', { key: k, value: k }, STATUSES[k].label); })
@@ -271,9 +386,10 @@ function CourierPanel(props) {
         ),
         React.createElement('p', { style: { margin: '6px 0' } }, o.description),
         o.pickup_addr && React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Откуда: ' + o.pickup_addr),
-        React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Куда: ' + o.delivery_addr),
+        React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Куда: ' + formatAddress(o)),
         React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Зона: ' + ((ZONES[o.zone] || {}).label || '') + ' — ' + o.price + ' ₽'),
         React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, 'Тел: ' + o.phone + ' · ' + (o.customer_name || '—')),
+        o.comment && React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#888' } }, '💬 ' + o.comment),
         o.courier_name && React.createElement('p', { style: { margin: '4px 0', fontSize: 13, color: '#4C6EF5', fontWeight: 600 } }, 'Взял: ' + o.courier_name),
         React.createElement('div', { style: { display: 'flex', gap: 8, marginTop: 10 } },
           o.status === 'new' && React.createElement('button', { onClick: function() { accept(o.id); },
@@ -290,7 +406,7 @@ function CourierPanel(props) {
   );
 }
 
-// ─── Курьер: заявка ───
+// ─── Заявка на курьера ───
 function CourierRequest() {
   const [status, setStatus] = useState('loading');
   const [sending, setSending] = useState(false);
