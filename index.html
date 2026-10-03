@@ -160,6 +160,7 @@ function NewOrder(props) {
   function set(k, v) { setForm(function(f) { const n = Object.assign({}, f); n[k] = v; return n; }); }
   const price = ZONES[form.zone].price;
   const inputStyle = { width: '100%', padding: 10, border: '1px solid #ddd', borderRadius: 8, fontSize: 15 };
+  const sectionTitle = { fontSize: 15, fontWeight: 700, marginTop: 8, marginBottom: 10, color: '#333' };
 
   function applySaved(addrId) {
     if (!addrId) return;
@@ -199,11 +200,18 @@ function NewOrder(props) {
       React.createElement('textarea', { style: Object.assign({}, inputStyle, { resize: 'vertical' }), rows: 3, value: form.description,
         onChange: function(e) { set('description', e.target.value); } })
     ),
-    form.task_type === 'pickup' && React.createElement(Field, { label: 'Откуда забрать' },
-      React.createElement('input', { style: inputStyle, value: form.pickup_addr, onChange: function(e) { set('pickup_addr', e.target.value); } })
+
+    // ─── Откуда забрать ───
+    form.task_type === 'pickup' && React.createElement('div', null,
+      React.createElement('div', { style: sectionTitle }, '📦 Откуда забрать'),
+      React.createElement(Field, { label: 'Адрес' },
+        React.createElement('input', { style: inputStyle, value: form.pickup_addr, onChange: function(e) { set('pickup_addr', e.target.value); } })
+      )
     ),
 
-    // ─── Блок адреса доставки ───
+    // ─── Куда доставить ───
+    React.createElement('div', { style: sectionTitle }, '📍 Куда доставить'),
+
     savedAddresses.length > 0 && React.createElement(Field, { label: 'Сохранённые адреса' },
       React.createElement('select', {
         style: inputStyle,
